@@ -11,6 +11,7 @@ parser.add_argument('-u', '--user', default=None)
 parser.add_argument('-p', '--password', default=None)
 parser.add_argument('-d', '--db', default='NOAA_water_database')
 parser.add_argument('-m', '--measurement', default='h2o_feet')
+parser.add_argument('-c', '--condition', action='append')
 args = parser.parse_args()
 
 client = InfluxDBClient(args.host, args.port, args.user, args.password, args.db)
@@ -20,13 +21,15 @@ tag_result = client.query('SHOW TAG KEYS FROM ' + measurement)
 tags = [i['tagKey'] for i in tag_result.get_points()]
 tags_with_time = tags + ['time']
 
-data_result = client.query('SELECT * FROM ' + measurement)
+conditions = [''] if not args.condition else args.condition
+for condition in conditions:
+    data_result = client.query(f'SELECT * FROM { measurement } {condition}')
 
-for point in data_result.get_points():
-    print(make_lines({'points': [{
-        'measurement': measurement,
-        'tags': { k: v for k, v in point.items() if k in tags},
-        'fields': { k: v for k, v in point.items() if k not in tags_with_time},
-        'time': point['time']
-        }]
-        }))
+    for point in data_result.get_points():
+        print(make_lines({'points': [{
+            'measurement': measurement,
+            'tags': { k: v for k, v in point.items() if k in tags},
+            'fields': { k: v for k, v in point.items() if k not in tags_with_time},
+            'time': point['time']
+            }]
+            }))
