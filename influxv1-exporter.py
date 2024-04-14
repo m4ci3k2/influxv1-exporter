@@ -12,6 +12,8 @@ parser.add_argument('-p', '--password', default=None)
 parser.add_argument('-d', '--db', default='NOAA_water_database')
 parser.add_argument('-m', '--measurement', default='h2o_feet')
 parser.add_argument('-c', '--condition', action='append')
+parser.add_argument('-C', '--gen-condition', action='append', default=None, metavar='field:value', help='generate condtions field=value and field:tag=value, useful when data in the database has mix of formats as influx will not return these rows at the same time')
+parser.add_argument('--help', action='help')
 args = parser.parse_args()
 
 client = InfluxDBClient(args.host, args.port, args.user, args.password, args.db)
@@ -22,6 +24,12 @@ tags = [i['tagKey'] for i in tag_result.get_points()]
 tags_with_time = tags + ['time']
 
 conditions = [''] if not args.condition else args.condition
+for gen_condition in args.gen_condition:
+    field, value = gen_condition.split(':')
+    if value == None:
+        raise RuntimeError("expected field:value in gen-condition")
+    conditions += [f'{ field }={ value }', f'{ field }:tag={ value}']
+
 for condition in conditions:
     data_result = client.query(f'SELECT * FROM { measurement } {condition}')
 
