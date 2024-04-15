@@ -21,12 +21,12 @@ args = parser.parse_args()
 client = InfluxDBClient(args.host, args.port, args.user, args.password, args.db)
 measurement = args.measurement
 
-tag_result = client.query('SHOW TAG KEYS FROM ' + measurement)
+tag_result = client.query(f'SHOW TAG KEYS FROM "{ measurement }"')
 tags = [i['tagKey'] for i in tag_result.get_points()]
 tags_with_time = tags + ['time']
 
-conditions = [''] if not args.condition else args.condition
-for gen_condition in args.gen_condition:
+conditions = args.condition or []
+for gen_condition in args.gen_condition or []:
     field, value = gen_condition.split(':')
     if value == None:
         raise RuntimeError("expected field:value in gen-condition")
@@ -36,8 +36,9 @@ fname = str(int(time()))+'.txt'
 outfile = f = open(fname, 'w', encoding="utf-8")
 print(f'saving to { fname }')
 
-for condition in conditions:
-    data_result = client.query(f'SELECT * FROM { measurement } {condition}')
+# one empty condition to make iteration correct if there are none
+for condition in conditions or ['']:
+    data_result = client.query(f'SELECT * FROM "{ measurement }" {condition}')
 
     for point in data_result.get_points():
         f.write(make_lines({'points': [{
