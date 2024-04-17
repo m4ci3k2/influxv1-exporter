@@ -14,6 +14,7 @@ parser.add_argument('-d', '--db', default='NOAA_water_database')
 parser.add_argument('-m', '--measurement', default='h2o_feet')
 parser.add_argument('-c', '--condition', action='append')
 parser.add_argument('-C', '--gen-condition', action='append', default=None, metavar='field:value', help='generate condtions field=value and field:tag=value, useful when data in the database has mix of formats as influx will not return these rows at the same time')
+parser.add_argument('-R', '--rename-field', action='append', default=None, metavar='field:newfield')
 parser.add_argument('-D', '--delete', action='store_true', help='delete data after reading')
 parser.add_argument('--help', action='help')
 args = parser.parse_args()
@@ -25,26 +26,34 @@ tag_result = client.query(f'SHOW TAG KEYS FROM "{ measurement }"')
 tags = [i['tagKey'] for i in tag_result.get_points()]
 tags_with_time = tags + ['time']
 
+print(f'DEBUG: tags={tags}')
+
 conditions = args.condition or []
 for gen_condition in args.gen_condition or []:
     field, value = gen_condition.split(':')
     if value == None:
         raise RuntimeError("expected field:value in gen-condition")
-    conditions += [f'{ field }={ value }', f'{ field }:tag={ value}']
+    conditions += [f'{ field }=\'{ value }\' ', f'{ field }::tag=\'{ value }\' ']
 
 fname = str(int(time()))+'.txt'
 outfile = f = open(fname, 'w', encoding="utf-8")
 print(f'saving to { fname }')
 
+rename_fields = {k: v for k,v in map(lambda x: x.split(':'), args.rename_field) or []}
+def rename_field(name):
+    return rename_fields.get(name, name)
+
 # one empty condition to make iteration correct if there are none
-for condition in conditions or ['']:
-    data_result = client.query(f'SELECT * FROM "{ measurement }" {condition}')
+for condition in conditions or ['true']:
+    print(f'q: SELECT * FROM "{ measurement }" WHERE {condition}')
+    data_result = client.query(f'SELECT * FROM "{ measurement }" WHERE {condition}')
 
     for point in data_result.get_points():
+#        print(list(point.items()))
         f.write(make_lines({'points': [{
             'measurement': measurement,
-            'tags': { k: v for k, v in point.items() if k in tags},
-            'fields': { k: v for k, v in point.items() if k not in tags_with_time},
+            'tags': { rename_field(k): v for k, v in point.items() if rename_field(k) in tags and v is not None},
+            'fields': { rename_field(k): v for k, v in point.items() if rename_field(k) not in tags_with_time and v is not None},
             'time': point['time']
             }]
             }))
